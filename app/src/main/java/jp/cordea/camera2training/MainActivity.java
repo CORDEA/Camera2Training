@@ -4,12 +4,16 @@ import android.content.Context;
 import android.content.Intent;
 import android.os.Bundle;
 import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
 import android.widget.Button;
 
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
 public class MainActivity extends AppCompatActivity {
+
+    @BindView(R.id.toolbar)
+    Toolbar toolbar;
 
     @BindView(R.id.step1_button)
     Button step1Button;
@@ -32,6 +36,8 @@ public class MainActivity extends AppCompatActivity {
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
 
+        setSupportActionBar(toolbar);
+
         Context context = this;
 
         step1Button.setOnClickListener(view ->
@@ -48,5 +54,6 @@ public class MainActivity extends AppCompatActivity {
 
         step5Button.setOnClickListener(view ->
                 startActivity(new Intent(context, jp.cordea.camera2training.step5.CameraActivity.class)));
+
     }
 }
