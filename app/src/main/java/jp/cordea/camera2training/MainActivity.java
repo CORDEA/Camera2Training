@@ -31,6 +31,9 @@ public class MainActivity extends AppCompatActivity {
     @BindView(R.id.step5_button)
     Button step5Button;
 
+    @BindView(R.id.step6_button)
+    Button step6Button;
+
     @BindString(R.string.title_format_text)
     String titleFormatText;
 
@@ -60,5 +63,7 @@ public class MainActivity extends AppCompatActivity {
         step5Button.setOnClickListener(view ->
                 startActivity(new Intent(context, jp.cordea.camera2training.step5.CameraActivity.class)));
 
+        step6Button.setOnClickListener(view ->
+                startActivity(new Intent(context, jp.cordea.camera2training.step6.CameraActivity.class)));
     }
 }
