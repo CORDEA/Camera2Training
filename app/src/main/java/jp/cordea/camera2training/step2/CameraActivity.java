@@ -29,9 +29,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
+import butterknife.BindString;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import jp.cordea.camera2training.AspectFitTextureView;
@@ -50,6 +52,12 @@ public class CameraActivity extends AppCompatActivity {
 
     @BindView(R.id.texture_view)
     AspectFitTextureView textureView;
+
+    @BindString(R.string.title_format_text)
+    String titleFormatText;
+
+    @BindString(R.string.step2_text)
+    String step2Text;
 
     private static final String THREAD_NAME = "CameraBackgroundThread";
 
@@ -77,6 +85,7 @@ public class CameraActivity extends AppCompatActivity {
         setContentView(R.layout.activity_camera_step2);
         ButterKnife.bind(this);
 
+        toolbar.setTitle(String.format(Locale.getDefault(), titleFormatText, step2Text));
         setSupportActionBar(toolbar);
     }
 

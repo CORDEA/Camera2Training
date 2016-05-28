@@ -37,9 +37,11 @@ import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.concurrent.Semaphore;
 import java.util.concurrent.TimeUnit;
 
+import butterknife.BindString;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 import jp.cordea.camera2training.AspectFitTextureView;
@@ -61,6 +63,12 @@ public class CameraActivity extends AppCompatActivity {
 
     @BindView(R.id.fab)
     FloatingActionButton fab;
+
+    @BindString(R.string.title_format_text)
+    String titleFormatText;
+
+    @BindString(R.string.step4_text)
+    String step4Text;
 
     private static final String THREAD_NAME = "CameraBackgroundThread";
 
@@ -160,8 +168,9 @@ public class CameraActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_camera_step4);
-
         ButterKnife.bind(this);
+
+        toolbar.setTitle(String.format(Locale.getDefault(), titleFormatText, step4Text));
         setSupportActionBar(toolbar);
 
         fab.setOnClickListener(view -> takePicture());

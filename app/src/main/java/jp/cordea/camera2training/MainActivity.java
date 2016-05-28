@@ -7,6 +7,7 @@ import android.support.v7.app.AppCompatActivity;
 import android.support.v7.widget.Toolbar;
 import android.widget.Button;
 
+import butterknife.BindString;
 import butterknife.BindView;
 import butterknife.ButterKnife;
 
@@ -30,12 +31,16 @@ public class MainActivity extends AppCompatActivity {
     @BindView(R.id.step5_button)
     Button step5Button;
 
+    @BindString(R.string.title_format_text)
+    String titleFormatText;
+
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
         ButterKnife.bind(this);
 
+        toolbar.setTitle(String.format(titleFormatText, ""));
         setSupportActionBar(toolbar);
 
         Context context = this;
