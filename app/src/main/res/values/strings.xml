@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">Camera2Training</string>
+    <string name="title_activity_camera">CameraActivity</string>
+    <string name="title_activity_camera2">Camera2Activity</string>
+
+    <string name="step1_text">step 1</string>
+    <string name="step2_text">step 2</string>
+    <string name="step3_text">step 3</string>
+    <string name="step4_text">step 4</string>
+    <string name="step5_text">step 5</string>
+</resources>

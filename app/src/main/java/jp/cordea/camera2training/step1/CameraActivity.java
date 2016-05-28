@@ -1,0 +1,319 @@
+package jp.cordea.camera2training.step1;
+
+import android.Manifest;
+import android.app.Activity;
+import android.content.Context;
+import android.content.pm.PackageManager;
+import android.graphics.ImageFormat;
+import android.graphics.SurfaceTexture;
+import android.hardware.camera2.CameraAccessException;
+import android.hardware.camera2.CameraCaptureSession;
+import android.hardware.camera2.CameraCharacteristics;
+import android.hardware.camera2.CameraDevice;
+import android.hardware.camera2.CameraManager;
+import android.hardware.camera2.CaptureRequest;
+import android.os.Bundle;
+import android.os.Handler;
+import android.os.HandlerThread;
+import android.support.annotation.NonNull;
+import android.support.v4.app.ActivityCompat;
+import android.support.v7.app.AppCompatActivity;
+import android.support.v7.widget.Toolbar;
+import android.util.Size;
+import android.view.Surface;
+import android.view.TextureView;
+
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
+import java.util.concurrent.Semaphore;
+import java.util.concurrent.TimeUnit;
+
+import butterknife.BindView;
+import butterknife.ButterKnife;
+import jp.cordea.camera2training.AspectFitTextureView;
+import jp.cordea.camera2training.R;
+import rx.Observable;
+import rx.Subscription;
+
+/**
+ * Step 1
+ * カメラに接続し、TextureView に表示するまで
+ */
+public class CameraActivity extends AppCompatActivity {
+
+    @BindView(R.id.toolbar)
+    Toolbar toolbar;
+
+    @BindView(R.id.texture_view)
+    AspectFitTextureView textureView;
+
+    private static final String THREAD_NAME = "CameraBackgroundThread";
+
+    private static final int CAMERA_PERMISSION_REQUEST_CODE = 100;
+
+    private static final int CAMERA_CONNECTION_SEMAPHORE_ACQUIRE_TIMEOUT = 2500;
+
+    private CameraDevice cameraDevice;
+
+    private CameraCaptureSession cameraCaptureSession;
+
+    private String cameraId;
+
+    private Handler backgroundHandler;
+
+    private HandlerThread backgroundThread;
+
+    private Subscription subscription;
+
+    private Semaphore cameraConnectionSemaphore = new Semaphore(1);
+
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        setContentView(R.layout.activity_camera_step1);
+        ButterKnife.bind(this);
+
+        setSupportActionBar(toolbar);
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+
+        startBackgroundThread();
+
+        if (textureView.isAvailable()) {
+            openCamera();
+        } else {
+            textureView.setSurfaceTextureListener(new TextureView.SurfaceTextureListener() {
+                @Override
+                public void onSurfaceTextureAvailable(SurfaceTexture surfaceTexture, int i, int i1) {
+                    openCamera();
+                }
+
+                @Override
+                public void onSurfaceTextureSizeChanged(SurfaceTexture surfaceTexture, int i, int i1) {
+                }
+
+                @Override
+                public boolean onSurfaceTextureDestroyed(SurfaceTexture surfaceTexture) {
+                    return false;
+                }
+
+                @Override
+                public void onSurfaceTextureUpdated(SurfaceTexture surfaceTexture) {
+                }
+            });
+        }
+    }
+
+    @Override
+    protected void onPause() {
+        closeCamera();
+        stopBackgroundThread();
+        super.onPause();
+    }
+
+    @Override
+    public void onRequestPermissionsResult(int requestCode, @NonNull String[] permissions, @NonNull int[] grantResults) {
+        super.onRequestPermissionsResult(requestCode, permissions, grantResults);
+        if (requestCode == CAMERA_PERMISSION_REQUEST_CODE) {
+            if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                openCamera();
+            }
+        }
+    }
+
+    private void openCamera() {
+        final Activity activity = this;
+        if (subscription != null && !subscription.isUnsubscribed()) {
+            subscription.unsubscribe();
+        }
+        subscription = getCameraSetupObservable()
+                .filter(size -> size != null)
+                .subscribe(size -> {
+                    if (ActivityCompat.checkSelfPermission(activity, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
+                        if (ActivityCompat.shouldShowRequestPermissionRationale(this, Manifest.permission.CAMERA)) {
+                            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST_CODE);
+                        } else {
+                            ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.CAMERA}, CAMERA_PERMISSION_REQUEST_CODE);
+                        }
+                        return;
+                    }
+
+                    try {
+                        if (!cameraConnectionSemaphore.tryAcquire(CAMERA_CONNECTION_SEMAPHORE_ACQUIRE_TIMEOUT, TimeUnit.MILLISECONDS)) {
+                            return;
+                        }
+                    } catch (InterruptedException e) {
+                        e.printStackTrace();
+                        return;
+                    }
+
+                    CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+
+                    try {
+                        manager.openCamera(cameraId, new CameraDevice.StateCallback() {
+                            @Override
+                            public void onOpened(@NonNull CameraDevice cd) {
+                                cameraConnectionSemaphore.release();
+                                cameraDevice = cd;
+                                createPreviewSession(size);
+                            }
+
+                            @Override
+                            public void onDisconnected(@NonNull CameraDevice cd) {
+                                cameraConnectionSemaphore.release();
+                                cd.close();
+                            }
+
+                            @Override
+                            public void onError(@NonNull CameraDevice cd, int i) {
+                                cameraConnectionSemaphore.release();
+                                cd.close();
+                            }
+                        }, backgroundHandler);
+
+                    } catch (CameraAccessException e) {
+                        e.printStackTrace();
+                    }
+                });
+    }
+
+    private Observable<Size> getCameraSetupObservable() {
+        final CameraManager manager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+        String[] ids;
+        try {
+            ids = manager.getCameraIdList();
+        } catch (CameraAccessException e) {
+            return Observable.just(null);
+        }
+
+        return Observable
+                .from(ids)
+                .flatMap(s -> {
+                    try {
+                        return Observable
+                                .just(manager.getCameraCharacteristics(s))
+                                .filter(cameraCharacteristics -> cameraCharacteristics != null)
+                                .filter(cameraCharacteristics -> {
+                                    Integer integer = cameraCharacteristics.get(CameraCharacteristics.LENS_FACING);
+                                    return integer == null || integer != CameraCharacteristics.LENS_FACING_FRONT;
+                                })
+                                .map(cameraCharacteristics -> cameraCharacteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP))
+                                .filter(streamConfigurationMap -> streamConfigurationMap != null)
+                                .doOnEach(notification -> {
+                                    cameraId = s;
+                                });
+                    } catch (CameraAccessException e) {
+                        return Observable.just(null);
+                    }
+                })
+                .filter(map -> map != null)
+                .map(map -> map.getOutputSizes(ImageFormat.JPEG))
+                .flatMap(original -> {
+                    final int width = textureView.getWidth();
+                    final int height = textureView.getHeight();
+
+                    return Observable
+                            .from(original)
+                            .filter(size -> (width <= size.getWidth() && height <= size.getHeight()))
+                            .toList()
+                            .map(sizes -> {
+                                if (sizes.size() > 0) {
+                                    return Collections.min(sizes, (size, t1) ->
+                                            (size.getHeight() * size.getWidth()) - (t1.getHeight() - t1.getWidth()));
+                                } else {
+                                    return Collections.max(Arrays.asList(original), (size, t1) ->
+                                            (size.getHeight() * size.getWidth()) - (t1.getHeight() - t1.getWidth()));
+                                }
+                            });
+                })
+                .doOnNext(size -> textureView.setAspect((float)size.getWidth() / (float)size.getHeight()));
+    }
+
+    private void createPreviewSession(Size size) {
+        SurfaceTexture texture = textureView.getSurfaceTexture();
+
+        texture.setDefaultBufferSize(size.getWidth(), size.getHeight());
+
+        Surface surface = new Surface(texture);
+
+        final CaptureRequest.Builder captureRequestBuilder;
+        try {
+            captureRequestBuilder = cameraDevice.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW);
+        } catch (CameraAccessException e) {
+            return;
+        }
+        captureRequestBuilder.addTarget(surface);
+
+        List<Surface> surfaces = new ArrayList<>();
+        surfaces.add(surface);
+
+        try {
+            cameraDevice.createCaptureSession(surfaces, new CameraCaptureSession.StateCallback() {
+                @Override
+                public void onConfigured(@NonNull CameraCaptureSession session) {
+                    cameraCaptureSession = session;
+                    captureRequestBuilder.set(CaptureRequest.CONTROL_AF_MODE,
+                            CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE);
+
+                    CaptureRequest captureRequest = captureRequestBuilder.build();
+                    try {
+                        cameraCaptureSession.setRepeatingRequest(captureRequest, null, backgroundHandler);
+                    } catch (CameraAccessException e) {
+                        e.printStackTrace();
+                    }
+                }
+
+                @Override
+                public void onConfigureFailed(@NonNull CameraCaptureSession cameraCaptureSession) {
+                }
+            }, null);
+        } catch (CameraAccessException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void startBackgroundThread() {
+        backgroundThread = new HandlerThread(THREAD_NAME);
+        backgroundThread.start();
+        backgroundHandler = new Handler(backgroundThread.getLooper());
+    }
+
+    private void stopBackgroundThread() {
+        backgroundThread.quitSafely();
+        try {
+            backgroundThread.join();
+
+            backgroundThread = null;
+            backgroundHandler = null;
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void closeCamera() {
+        try {
+            cameraConnectionSemaphore.acquire();
+            if (cameraCaptureSession != null) {
+                cameraCaptureSession.close();
+                cameraCaptureSession = null;
+            }
+            if (cameraDevice != null) {
+                cameraDevice.close();
+                cameraDevice = null;
+            }
+            if (subscription != null && !subscription.isUnsubscribed()) {
+                subscription.unsubscribe();
+            }
+        } catch (InterruptedException e) {
+            e.printStackTrace();
+        } finally {
+            cameraConnectionSemaphore.release();
+        }
+    }
+
+}
