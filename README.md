@@ -24,3 +24,7 @@ Implement the save function of still image.
 ### Step 5
 
 Implement the switching function of the back and front camera.
+
+### Step 6
+
+Implement the switching function of flash of camera.
