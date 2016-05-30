@@ -51,6 +51,7 @@
         </activity>
         <activity
             android:name=".step6.CameraActivity"
+            android:screenOrientation="portrait"
             android:theme="@style/AppTheme.NoActionBar">
         </activity>
     </application>
